@@ -31,14 +31,15 @@ jobs:
           cache-dependency-path: .github/workflows/lightning.yml
       - run: pip install h5py numpy
       - run: python lightning.py
-      - name: Sumar el mapa de lluvia
+      # Solo publica (sin tocar la rama data): junta los rayos con lo último guardado ahí.
+      - name: Sumar lluvia y pronóstico guardados
         run: |
-          touch out/.nojekyll
-          git fetch -q origin data && git show origin/data:rain.bin > out/rain.bin \
-            || curl -sf -o out/rain.bin https://jorgedsgn.github.io/celaje-datos/rain.bin
+          mkdir -p site
+          git fetch -q --depth 1 origin data && git --work-tree=site checkout FETCH_HEAD -- . || true
+          cp out/lightning.json site/ && touch site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: out
+          path: site
       - uses: actions/deploy-pages@v4
       - name: Mantener activa la tarea
         run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/lightning.yml/enable" || true

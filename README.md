@@ -9,4 +9,7 @@ grilla de 0,25°) en GitHub Pages.
 `lightning.py` corre cada ~5 minutos: lee los rayos del detector GLM del satélite GOES-19
 (NOAA, dominio público) y publica `lightning.json` con los rayos de la última hora.
 
-Fuentes: NOAA GOES-19 GLM (dominio público) y ECMWF Open Data — licencia [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+`forecast.py` corre cada 6 horas: pronóstico por hora de Chile (~7 días) con ECMWF, GFS e ICON
+en una grilla de 0,25°, corregible por altura con `dem.bin` (AWS Terrain Tiles), en archivos por zona `fc/`.
+
+Fuentes: NOAA GOES-19 GLM (dominio público) y ECMWF Open Data, NOAA GFS (dominio público), DWD ICON (CC BY 4.0), AWS Terrain Tiles — licencia ECMWF [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).

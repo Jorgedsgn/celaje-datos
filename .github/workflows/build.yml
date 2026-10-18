@@ -1,5 +1,4 @@
-# Cada 3 horas: baja el último pronóstico del ECMWF y genera rain.bin.
-# Lo guarda en la rama "data" y vuelve a publicar el sitio junto con los rayos más recientes.
+# Cada 3 horas: mapa de lluvia (ECMWF) → rain.bin.
 name: Mapa de lluvia
 
 on:
@@ -17,34 +16,26 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 55
-    concurrency:
-      group: rain
-      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: pip install ecmwf-opendata eccodes numpy
-      # Copia del ECMWF en la nube de Microsoft (la de Amazon frenaba las descargas con "503 Slow Down").
+      # Copia del ECMWF en la nube de Microsoft (la de Amazon frenaba con "503 Slow Down").
       - run: python build.py
         env:
           ECMWF_SOURCE: azure
-      - name: Guardar en la rama data
-        run: |
-          mkdir data && cp out/rain.bin data/ && cd data
-          git init -q -b data
-          git config user.name "celaje-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add -A && git commit -q -m "Lluvia $(date -u +%Y-%m-%dT%H:%MZ)"
-          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" data
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rain
+          path: out/rain.bin
       # GitHub apaga las tareas programadas tras 60 días sin actividad: volver a activarla la mantiene viva.
-      - name: Mantener activa la tarea
-        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/build.yml/enable" || true
+      - run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/build.yml/enable" || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  deploy:
+  publish:
     needs: build
     runs-on: ubuntu-latest
     concurrency:
@@ -54,15 +45,10 @@ jobs:
       name: github-pages
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
-          ref: data
-          path: out
-      - name: Sumar los rayos publicados
-        run: |
-          rm -rf out/.git
-          touch out/.nojekyll
-          curl -sf -o out/lightning.json https://jorgedsgn.github.io/celaje-datos/lightning.json || echo "sin rayos aún"
-      - uses: actions/upload-pages-artifact@v3
+          name: rain
+          path: new
+      - uses: ./.github/actions/publish
         with:
-          path: out
-      - uses: actions/deploy-pages@v4
+          token: ${{ secrets.GITHUB_TOKEN }}

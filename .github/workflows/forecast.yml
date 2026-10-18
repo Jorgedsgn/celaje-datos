@@ -1,0 +1,52 @@
+# Cada 6 horas: pronóstico por hora de Chile con ECMWF, GFS e ICON → fc/*.bin.
+name: Pronóstico
+
+on:
+  schedule:
+    - cron: "10 2,8,14,20 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ecmwf-opendata eccodes numpy scipy
+      - run: python forecast.py
+        env:
+          ECMWF_SOURCE: azure
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fc
+          path: out/fc
+      - run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/forecast.yml/enable" || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: fc
+          path: new/fc
+      - uses: ./.github/actions/publish
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
