@@ -73,7 +73,8 @@ def main():
     cutoff = int(now.timestamp()) - WINDOW
     flashes, last = [], None
     try:
-        prev = json.loads(get(PREVIOUS))
+        prev_file = os.environ.get("PREVIOUS_FILE")
+        prev = json.load(open(prev_file)) if prev_file else json.loads(get(PREVIOUS))
         flashes = [f for f in prev.get("flashes", []) if f[2] >= cutoff]
         last = prev.get("last")
     except Exception as e:

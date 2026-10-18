@@ -1,4 +1,5 @@
-# Cada 3 horas: mapa de lluvia (ECMWF) → rain.bin.
+# Mapa de lluvia (ECMWF) → rain.bin. La lanza la tarea de rayos cuando el mapa tiene más de
+# 3 horas (y el reloj de GitHub, cuando funciona).
 name: Mapa de lluvia
 
 on:
@@ -9,8 +10,10 @@ on:
 permissions:
   contents: write
   actions: write
-  pages: write
-  id-token: write
+
+concurrency:
+  group: lluvia
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -26,29 +29,10 @@ jobs:
       - run: python build.py
         env:
           ECMWF_SOURCE: azure
-      - uses: actions/upload-artifact@v4
-        with:
-          name: rain
-          path: out/rain.bin
-      # GitHub apaga las tareas programadas tras 60 días sin actividad: volver a activarla la mantiene viva.
-      - run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/build.yml/enable" || true
+      - name: Guardar y publicar
+        run: |
+          mkdir -p new && cp out/rain.bin new/
+          scripts/push_data.sh new lluvia
+          gh workflow run publish.yml
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  publish:
-    needs: build
-    runs-on: ubuntu-latest
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-    environment:
-      name: github-pages
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: rain
-          path: new
-      - uses: ./.github/actions/publish
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}

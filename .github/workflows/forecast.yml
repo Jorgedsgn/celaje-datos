@@ -1,4 +1,5 @@
-# Cada 6 horas: pronóstico por hora de Chile con ECMWF, GFS e ICON → fc/*.bin.
+# Pronóstico por hora de Chile con ECMWF, GFS e ICON → fc/*.bin. La lanza la tarea de rayos
+# cuando tiene más de 6 horas (y el reloj de GitHub, cuando funciona).
 name: Pronóstico
 
 on:
@@ -9,13 +10,15 @@ on:
 permissions:
   contents: write
   actions: write
-  pages: write
-  id-token: write
+
+concurrency:
+  group: pronostico
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -25,28 +28,10 @@ jobs:
       - run: python forecast.py
         env:
           ECMWF_SOURCE: azure
-      - uses: actions/upload-artifact@v4
-        with:
-          name: fc
-          path: out/fc
-      - run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/forecast.yml/enable" || true
+      - name: Guardar y publicar
+        run: |
+          mkdir -p new && cp -r out/fc new/
+          scripts/push_data.sh new pronostico
+          gh workflow run publish.yml
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  publish:
-    needs: build
-    runs-on: ubuntu-latest
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-    environment:
-      name: github-pages
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: fc
-          path: new/fc
-      - uses: ./.github/actions/publish
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
