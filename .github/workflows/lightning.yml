@@ -1,0 +1,46 @@
+# Cada ~5 minutos: rayos de la última hora del GLM (GOES-19) y publica el sitio
+# junto con el último mapa de lluvia guardado en la rama "data".
+name: Rayos
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+  pages: write
+  id-token: write
+
+jobs:
+  lightning:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: .github/workflows/lightning.yml
+      - run: pip install h5py numpy
+      - run: python lightning.py
+      - name: Sumar el mapa de lluvia
+        run: |
+          touch out/.nojekyll
+          git fetch -q origin data && git show origin/data:rain.bin > out/rain.bin \
+            || curl -sf -o out/rain.bin https://jorgedsgn.github.io/celaje-datos/rain.bin
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+      - uses: actions/deploy-pages@v4
+      - name: Mantener activa la tarea
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/lightning.yml/enable" || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
