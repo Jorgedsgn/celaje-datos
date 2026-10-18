@@ -18,17 +18,17 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: pip install ecmwf-opendata eccodes numpy
-      # Copia del ECMWF en la nube de Amazon: más rápida y sin el límite de conexiones del portal.
+      # Copia del ECMWF en la nube de Microsoft (la de Amazon frenaba las descargas con "503 Slow Down").
       - run: python build.py
         env:
-          ECMWF_SOURCE: aws
+          ECMWF_SOURCE: azure
       - name: Publicar en la rama gh-pages
         run: |
           cd out
