@@ -103,5 +103,70 @@ def main():
     print(f"Listo: {len(intervals)} intervalos, {rows}x{cols} puntos, {len(body) / 1024:.0f} KB, puntos con lluvia: {rain_pts}")
 
 
+WIND_RES = 0.5
+
+
+def wind(client, run):
+    """Viento en superficie (10 m) y en altura (500 hPa, ~5.500 m: el que mueve las nubes),
+    cada 3 h, en grilla de 0,5°. Escribe out/wind.bin:
+      uint32 largo + encabezado JSON + deflate crudo de int8 por [paso][nivel][u, v][fila][col]
+      en pasos de 0,5 m/s (u = hacia el este, v = hacia el norte)."""
+    grib = os.path.join(OUT, "wind.grib2")
+    gp = os.path.join(OUT, "wind_pl.grib2")
+    client.retrieve(date=run, type="fc", step=STEPS, param=["10u", "10v"], target=grib)
+    client.retrieve(date=run, type="fc", step=STEPS, param=["u", "v"], levtype="pl", levelist=[500], target=gp)
+    rows = int(round((NORTH - SOUTH) / WIND_RES)) + 1
+    cols = int(round((EAST - WEST) / WIND_RES)) + 1
+    lats = NORTH - np.arange(rows) * WIND_RES
+    lons = WEST + np.arange(cols) * WIND_RES
+    fields = {}
+    for path in (grib, gp):
+        with open(path, "rb") as f:
+            while True:
+                h = eccodes.codes_grib_new_from_file(f)
+                if h is None:
+                    break
+                try:
+                    sn = eccodes.codes_get(h, "shortName")
+                    step = int(eccodes.codes_get(h, "endStep"))
+                    ni, nj = eccodes.codes_get(h, "Ni"), eccodes.codes_get(h, "Nj")
+                    lat0 = eccodes.codes_get(h, "latitudeOfFirstGridPointInDegrees")
+                    lon0 = eccodes.codes_get(h, "longitudeOfFirstGridPointInDegrees")
+                    dlat = eccodes.codes_get(h, "jDirectionIncrementInDegrees")
+                    dlon = eccodes.codes_get(h, "iDirectionIncrementInDegrees")
+                    vals = eccodes.codes_get_values(h).reshape(nj, ni)
+                finally:
+                    eccodes.codes_release(h)
+                r = np.round((lat0 - lats) / dlat).astype(int)
+                c = np.round(((lons - lon0) % 360) / dlon).astype(int) % ni
+                key = {"10u": "su", "10v": "sv", "u": "au", "v": "av"}[sn]
+                fields[(step, key)] = vals[np.ix_(r, c)]
+    steps = [s for s in STEPS if all((s, k) in fields for k in ("su", "sv", "au", "av"))]
+    payload = bytearray()
+    for st in steps:
+        for k in ("su", "sv", "au", "av"):
+            payload += np.clip(np.round(fields[(st, k)] / 0.5), -127, 127).astype(np.int8).tobytes()
+    header = {
+        "source": "ECMWF Open Data (CC BY 4.0)", "run": int(run.timestamp()),
+        "north": NORTH, "west": WEST, "step": WIND_RES, "rows": rows, "cols": cols,
+        "starts": [int((run + timedelta(hours=st)).timestamp()) for st in steps],
+        "hours": 3, "levels": ["10m", "500hPa"], "scale": 0.5,
+    }
+    comp = zlib.compressobj(9, zlib.DEFLATED, -15)
+    body = comp.compress(bytes(payload)) + comp.flush()
+    head = json.dumps(header, separators=(",", ":")).encode()
+    with open(os.path.join(OUT, "wind.bin"), "wb") as f:
+        f.write(struct.pack("<I", len(head)) + head + body)
+    os.remove(grib)
+    os.remove(gp)
+    print(f"Viento: {len(steps)} pasos, {rows}x{cols} puntos, {len(body) / 1024:.0f} KB")
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
+    # El viento va aparte: si falla, el mapa de lluvia igual se publica.
+    try:
+        c = Client(source=os.environ.get("ECMWF_SOURCE", "ecmwf"), model="ifs", resol="0p25")
+        wind(c, c.latest(type="fc", step=STEPS[-1], param="tp"))
+    except Exception as e:
+        print("Viento: FALLÓ", e)

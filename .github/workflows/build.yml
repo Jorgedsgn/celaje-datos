@@ -31,7 +31,7 @@ jobs:
           ECMWF_SOURCE: azure
       - name: Guardar y publicar
         run: |
-          mkdir -p new && cp out/rain.bin new/
+          mkdir -p new && cp out/rain.bin new/ && (cp out/wind.bin new/ || true)
           scripts/push_data.sh new lluvia
           gh workflow run publish.yml
         env:
