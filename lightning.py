@@ -102,7 +102,32 @@ def main():
     out = {"source": "NOAA GOES-19 GLM", "updated": int(now.timestamp()), "last": last, "flashes": flashes}
     with open(os.path.join(OUT, "lightning.json"), "w") as f:
         json.dump(out, f, separators=(",", ":"))
+    write_tiles(flashes, out["updated"], last)
     print(f"Rayos en la última hora: {len(flashes)}")
+
+
+TILE = 3.0          # grados por zona
+MARGIN = 1.5        # cada zona incluye los rayos hasta 1,5° fuera de su borde (~150 km)
+
+
+def write_tiles(flashes, updated, last):
+    """Un archivo chico por zona de 3°×3° (lt/<fila>_<col>.json) con los rayos de la última hora
+    en la zona y sus alrededores: la app baja solo el de donde está (unos pocos KB)."""
+    d = os.path.join(OUT, "lt")
+    os.makedirs(d, exist_ok=True)
+    rows = int((NORTH - SOUTH) / TILE) + 1
+    cols = int((EAST - WEST) / TILE) + 1
+    buckets = {(r, c): [] for r in range(rows) for c in range(cols)}
+    for f in flashes:
+        lat, lon = f[0] / 100, f[1] / 100
+        r0 = int((NORTH - (lat + MARGIN)) // TILE); r1 = int((NORTH - (lat - MARGIN)) // TILE)
+        c0 = int((lon - MARGIN - WEST) // TILE); c1 = int((lon + MARGIN - WEST) // TILE)
+        for r in range(max(r0, 0), min(r1, rows - 1) + 1):
+            for c in range(max(c0, 0), min(c1, cols - 1) + 1):
+                buckets[(r, c)].append(f)
+    for (r, c), fl in buckets.items():
+        with open(os.path.join(d, f"{r}_{c}.json"), "w") as fh:
+            json.dump({"updated": updated, "last": last, "flashes": fl}, fh, separators=(",", ":"))
 
 
 def safe(k):

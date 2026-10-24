@@ -37,7 +37,7 @@ jobs:
             t0=$(date +%s)
             if PREVIOUS_FILE=prev.json python lightning.py; then
               cp out/lightning.json prev.json
-              mkdir -p new && cp out/lightning.json new/
+              mkdir -p new && cp out/lightning.json new/ && cp -r out/lt new/
               scripts/push_data.sh new rayos || true   # la app lee la rama data directo; Pages no se republica cada 5 min
             fi
             # ¿Lluvia (3 h) o pronóstico (6 h) viejos? Se lanzan si no están corriendo ya.
