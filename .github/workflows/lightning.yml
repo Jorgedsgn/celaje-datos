@@ -38,7 +38,7 @@ jobs:
             if PREVIOUS_FILE=prev.json python lightning.py; then
               cp out/lightning.json prev.json
               mkdir -p new && cp out/lightning.json new/
-              scripts/push_data.sh new rayos && gh workflow run publish.yml || true
+              scripts/push_data.sh new rayos || true   # la app lee la rama data directo; Pages no se republica cada 5 min
             fi
             # ¿Lluvia (3 h) o pronóstico (6 h) viejos? Se lanzan si no están corriendo ya.
             git fetch -q --depth 1 origin data && git show FETCH_HEAD:stamps.json > stamps.json 2>/dev/null || echo '{}' > stamps.json
